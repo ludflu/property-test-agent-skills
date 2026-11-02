@@ -1,6 +1,6 @@
 ---
 name: proptest-praxis
-description: "Build model-based property-testing suites to find correctness bugs, then reduce failures to deterministic regression tests and minimal fixes. Use for broad property-testing coverage of custom data structures and algorithms, including operation-sequence generators and independent reference models."
+description: "Build model-based property-testing suites (Python Hypothesis, TypeScript fast-check, or Rust proptest) to find correctness bugs, then reduce failures to deterministic regression tests and minimal fixes. Use for broad property-testing coverage of custom data structures and algorithms, including operation-sequence generators and independent reference models."
 ---
 
 # Agents and property tests: investigation prompt
@@ -9,7 +9,7 @@ Use these instructions in the target repository. Incorporate any maintainer conc
 
 ## 1. Objective and deliverables
 
-Find correctness bugs across the repository by building and running property-testing machinery. Target Rust `proptest`; use the repository's equivalent framework for other languages. Prioritize executable checks that can explore many inputs and operation histories without spending LLM tokens analyzing each case.
+Find correctness bugs across the repository by building and running property-testing machinery. Detect the stack from the repo (Python, TypeScript/JavaScript, Rust, or other) and use its conventional framework: **Hypothesis** for Python, **fast-check** for TypeScript/JavaScript, **proptest** for Rust. Load [references/python-hypothesis.md](references/python-hypothesis.md), [references/typescript-fast-check.md](references/typescript-fast-check.md), or [references/rust-proptest.md](references/rust-proptest.md) for strategy APIs, stateful harness patterns, and runner commands. Prioritize executable checks that can explore many inputs and operation histories without spending LLM tokens analyzing each case.
 
 Maintain a discovery branch containing reference implementations, generators, operation ASTs, invariants, and investigative tests. This suite can be large, repetitive, and unoptimized. Its correctness matters; production-level performance and polish usually don't. Run it locally and retain reproducible failures.
 
@@ -60,9 +60,9 @@ Use bounded exhaustive enumeration when small domains make it practical, alongsi
 
 ## 4. Build effective generators and operation-sequence tests
 
-**Model-based stateful differential testing:** represent interactions as an explicit operation enum/AST and replay shared histories against production and an independent reference model. Include mutations, reads, iteration, bulk operations, clear/reset, and clone/snapshot where relevant. Generate configuration and initial state as well as histories. Use ordinary compositional `proptest` strategies; use `proptest-state-machine` when state-dependent transitions simplify the harness.
+**Model-based stateful differential testing:** represent interactions as an explicit operation enum/AST (or framework-native command list) and replay shared histories against production and an independent reference model. Include mutations, reads, iteration, bulk operations, clear/reset, and clone/snapshot where relevant. Generate configuration and initial state as well as histories. Use compositional strategies from the stack’s property library; use stateful/command-sequence APIs when state-dependent transitions simplify the harness (Hypothesis `RuleBasedStateMachine`, fast-check model-based commands, Rust `proptest-state-machine`).
 
-**Constructive generation and near-valid inputs:** generate valid ASTs, graphs, and requests to reach deep behavior; derive invalid variants by selectively violating one constraint, such as a dangling reference, inconsistent length, duplicate identifier, or truncated encoding. Control depth, breadth, size, and sharing. Use `prop_recursive` for recursive trees/ASTs; generate graph references separately to control sharing and cycles. Keep unconstrained external-input tests too.
+**Constructive generation and near-valid inputs:** generate valid ASTs, graphs, and requests to reach deep behavior; derive invalid variants by selectively violating one constraint, such as a dangling reference, inconsistent length, duplicate identifier, or truncated encoding. Control depth, breadth, size, and sharing. Use recursive generators (`st.recursive`, `fc.letrec` / `fc.memo`, `prop_recursive`) for trees and ASTs; generate graph references separately to control sharing and cycles. Keep unconstrained external-input tests too.
 
 **Input-space partitioning and combinatorial interaction coverage:** define meaningful state, operand, operation, and configuration classes, then cross them deliberately. Example: overwrite × warmed cache × shared snapshot × capacity boundary. Enumerate small products or use targeted pairwise/t-way combinations as dimensions grow; inspect which combinations actually occur. Exercise values immediately below, at, and above implementation thresholds.
 
@@ -74,9 +74,9 @@ Combine general random histories with targeted patterns: warm → mutate → que
 
 **Swarm testing and operation-mix diversification:** vary enabled operation subsets and weights across cases. Frequent clear/remove operations can prevent growth; frequent reads can prevent lazy state from remaining uninitialized. Include growth-heavy, mutation-heavy, read-heavy, and reuse-heavy histories where useful. Keep broad mixed histories and occasional longer traces too.
 
-Use state-aware generation to reach interesting states efficiently. Preserve explicit coverage of missing keys, duplicate operations, malformed inputs, and rejection paths. Don't constrain tests to current caller habits or discard a failure merely because an outer layer usually avoids that input. Distinguish an actual API restriction from an incidental calling pattern; respect Rust memory-safety requirements when invoking unsafe APIs.
+Use state-aware generation to reach interesting states efficiently. Preserve explicit coverage of missing keys, duplicate operations, malformed inputs, and rejection paths. Don't constrain tests to current caller habits or discard a failure merely because an outer layer usually avoids that input. Distinguish an actual API restriction from an incidental calling pattern; respect language safety rules and documented API contracts (including Rust `unsafe` when applicable).
 
-Design dependencies for shrinking. Prefer constructing related inputs with `prop_map`, `prop_flat_map`, or state-machine strategies over rejecting most generated cases with filters or `prop_assume!`. Account for references to objects created earlier when shrinking deletes operations. Avoid harnesses where shrinking turns most commands into silently skipped work. Keep generation and replay deterministic, including operand selection from collections; avoid hidden randomness inside the test body.
+Design dependencies for shrinking. Prefer constructing related inputs with map/flatMap/chain (or state-machine strategies) over rejecting most generated cases with filters or assumptions (`assume`, `fc.pre`, `prop_assume!`). Account for references to objects created earlier when shrinking deletes operations. Avoid harnesses where shrinking turns most commands into silently skipped work. Keep generation and replay deterministic, including operand selection from collections; avoid hidden randomness inside the test body.
 
 **Fault activation and observability (RIPR: reachability, infection, propagation, revealability):** detecting a defect requires reaching the faulty code, causing incorrect state, propagating it to an observable result, and checking that result. Design histories that complete this chain. Compare operation results and observable state against the model, and independently recompute invariants where useful. Treat reads as operations: they may populate caches or trigger lazy work. Ensure extra checking doesn't accidentally warm every cache or force every deferred computation; include histories with delayed reads as well as frequent reads.
 
